@@ -1,0 +1,53 @@
+{
+    "name": "reporter",
+    "version": "1.0.0",
+    "description": "Metrics reporting library",
+    "keywords": "metrics, monitoring, reporting, telemetry, influxdb, telegraf",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/piolibs/reporter.git"
+    },
+    "authors": [
+        {
+            "name": "Dmitry Korobkov",
+            "email": "dmitry.korobkov.nn@gmail.com",
+            "url": "https://github.com/dk6v",
+            "maintainer": true
+        }
+    ],
+    "license": "GPL-3.0",
+    "frameworks": "arduino",
+    "platforms": [
+        "arduino",
+        "espressif8266"
+    ],
+    "build": {
+        "libArchive": false,
+        "srcDir": "src",
+        "includeDir": "include",
+        "flags": [
+            "-Iinclude"
+        ],
+        "srcFilter": [
+            "+<**/*.cpp>"
+        ]
+    },
+    "headers": [
+        "reporter.h"
+    ],
+    "export": {
+        "include": [
+            "src/**/*",
+            "include/*",
+            "LICENSE",
+            "README.md"
+        ],
+        "exclude": [
+            "test/*",
+            ".gitignore"
+        ]
+    },
+    "examples": [
+        "examples/*/*.ino"
+    ]
+}
