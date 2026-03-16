@@ -45,23 +45,37 @@ public:
     virtual void clear();
     virtual void destroy();
 
-    template <typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
-    void addHeader(const std::string &tag, const T &value, bool condition = true) {
+    template <typename T, typename std::enable_if<std::is_arithmetic<T>::value, int>::type = 0>
+    void addHeader(const std::string &tag, const T &value, bool condition = true)
+    {
         if (condition) {
             mHeaders.emplace_back(tag, std::to_string(value));
         }
     }
 
-    template <typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
-    void addTag(const std::string &tag, const T &value, bool condition = true) {
+    template <typename T, typename std::enable_if<std::is_arithmetic<T>::value, int>::type = 0>
+    void addTag(const std::string &tag, const T &value, bool condition = true)
+    {
         if (condition) {
             mTags.emplace_back(tag, std::to_string(value));
         }
     }
 
-    template <typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
-    void addField(const std::string &tag, const T &value, bool condition = true) {
+    template <typename T, typename std::enable_if<std::is_integral<T>::value, int>::type = 0>
+    void addField(const std::string &tag, const T &value, bool condition = true)
+    {
         if (condition) {
+            mFields.emplace_back(tag, std::to_string(value));
+        }
+    }
+
+    template <typename T, typename std::enable_if<std::is_floating_point<T>::value, int>::type = 0>
+    void addField(const std::string &tag, const T &value, bool condition = true)
+    {
+        if (condition)
+        {
+            char buffer[32];
+            snprintf(buffer, sizeof(buffer), "%g", value);
             mFields.emplace_back(tag, std::to_string(value));
         }
     }
