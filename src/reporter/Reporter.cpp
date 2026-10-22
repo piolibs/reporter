@@ -30,28 +30,31 @@ void Reporter::destroy() {
     mFields.clear();
 }
 
+// Tags are stored as is, the reporter escapes them for its format
 void Reporter::addHeader(const std::string &tag, const std::string &value, bool condition) {
-    if (!condition) return;
-
-    if (value.find(' ') == std::string::npos) {
+    if (condition) {
         mHeaders.emplace_back(tag, value);
-    } else {
-        mHeaders.emplace_back(tag, "\"" + value + "\"");
     }
 }
 
 void Reporter::addTag(const std::string &tag, const std::string &value, bool condition) {
-    if (!condition) return;
-
-    if (value.find(' ') == std::string::npos) {
+    if (condition) {
         mTags.emplace_back(tag, value);
-    } else {
-        mTags.emplace_back(tag, "\"" + value + "\"");
     }
 }
 
+// A string field is quoted, quotes and backslashes inside are escaped
 void Reporter::addField(const std::string &tag, const std::string &value, bool condition) {
-    if (condition) {
-        mFields.emplace_back(tag, "\"" + value + "\"");
+    if (!condition) return;
+
+    std::string quoted = "\"";
+    for (char c : value) {
+        if ((c == '"') || (c == '\\')) {
+            quoted += '\\';
+        }
+        quoted += c;
     }
+    quoted += '"';
+
+    mFields.emplace_back(tag, quoted);
 }

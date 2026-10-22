@@ -10,6 +10,8 @@
 #undef LOG_MODULE
 #define LOG_MODULE "REPORT"
 
+#include <cstring>
+
 #include <Arduino.h>
 #include <Client.h>
 #include <console.h>
@@ -18,69 +20,137 @@
 
 using namespace reporter;
 
+namespace {
+
+// Escape the characters the line protocol uses as separators
+void append(std::string &line, const std::string &value, const char *special)
+{
+    for (char c : value)
+    {
+        if (strchr(special, c) != nullptr)
+        {
+            line += '\\';
+        }
+        line += c;
+    }
+}
+
+constexpr const char *MEASUREMENT_SPECIAL = ", ";
+constexpr const char *KEY_SPECIAL = ",= ";
+
+} // namespace
+
 size_t InfluxReporter::send(uint32_t timestamp)
 {
-    if (mMeasurement.empty() || (mHeaders.empty() && mTags.empty() && mFields.empty()))
-        return 0;
-
-    char metric[160] = {0};
-    char *npos = metric;
-
-    // Fails if the text doesn't fit, a truncated metric is never sent
-    auto append = [&](auto &&...args) -> bool
+    std::string line = format(timestamp);
+    if (line.empty())
     {
-        size_t remaining = sizeof(metric) - (npos - metric);
-        int length = snprintf(npos, remaining, std::forward<decltype(args)>(args)...);
-        if ((length < 0) || (static_cast<size_t>(length) >= remaining))
+        return 0;
+    }
+
+    LOGI("%.*s", static_cast<int>(line.size() - 1), line.c_str());  // without '\n'
+
+    if (!mBatching)
+    {
+        return (transmit(line) == line.size()) ? line.size() : 0;
+    }
+
+    if (mBatch.size() + line.size() > MAX_BATCH)
+    {
+        commit();
+        mBatching = true;
+    }
+
+    mBatch += line;
+    return line.size();
+}
+
+void InfluxReporter::beginBatch()
+{
+    mBatching = true;
+    mBatch.clear();
+}
+
+size_t InfluxReporter::commit()
+{
+    size_t length = mBatch.empty() ? 0 : transmit(mBatch);
+
+    mBatching = false;
+    mBatch.clear();
+
+    return length;
+}
+
+std::string InfluxReporter::format(uint32_t timestamp)
+{
+    // The line protocol needs at least one field
+    if (mMeasurement.empty() || mFields.empty())
+    {
+        return std::string();
+    }
+
+    std::string line;
+    line.reserve(MAX_LINE);
+
+    append(line, mMeasurement, MEASUREMENT_SPECIAL);
+
+    for (const auto *tags : {&mHeaders, &mTags})
+    {
+        for (const auto &tag : *tags)
         {
-            LOGE("failed to send metric, out of metric");
-            return false;
+            line += ',';
+            append(line, std::get<NAME>(tag), KEY_SPECIAL);
+            line += '=';
+            append(line, std::get<VALUE>(tag), KEY_SPECIAL);
         }
-        npos += length;
-        return true;
-    };
-
-    if (!append("%s", mMeasurement.c_str()))
-        return 0;
-
-    for (auto it = mHeaders.begin(); it != mHeaders.end(); ++it)
-    {
-        if (!append(",%s=%s", std::get<NAME>(*it).c_str(), std::get<VALUE>(*it).c_str()))
-            return 0;
     }
 
-    for (auto it = mTags.begin(); it != mTags.end(); ++it)
+    // Field values are already formatted: numbers or quoted strings
+    char separator = ' ';
+    for (const auto &field : mFields)
     {
-        if (!append(",%s=%s", std::get<NAME>(*it).c_str(), std::get<VALUE>(*it).c_str()))
-            return 0;
-    }
-
-    for (auto it = mFields.begin(); it != mFields.end(); ++it)
-    {
-        if (!append("%c", (it == mFields.begin()) ? ' ' : ','))
-            return 0;
-        if (!append("%s=%s", std::get<NAME>(*it).c_str(), std::get<VALUE>(*it).c_str()))
-            return 0;
+        line += separator;
+        append(line, std::get<NAME>(field), KEY_SPECIAL);
+        line += '=';
+        line += std::get<VALUE>(field);
+        separator = ',';
     }
 
     if ((timestamp != 0) && (timestamp != static_cast<uint32_t>(-1)))
     {
-        if (!append(" %s000000000", std::to_string(timestamp).c_str()))
-            return 0;
+        line += ' ';
+        line += std::to_string(timestamp);
+        line += "000000000";
     }
 
-    // Connect only for a complete metric, so a failed one doesn't leave it open
+    line += '\n';
+
+    if (line.size() > MAX_LINE)
+    {
+        LOGE("failed to send metric, too long: size=%u", line.size());
+        return std::string();
+    }
+
+    return line;
+}
+
+size_t InfluxReporter::transmit(const std::string &data)
+{
     if (!mClient_p->connect(mHost.c_str(), mPort))
+    {
+        LOGE("failed to connect, %u bytes dropped", data.size());
         return 0;
+    }
 
-    const size_t length = mClient_p->write(
-        reinterpret_cast<const uint8_t *>(metric),
-        strlen(metric));
-
-    LOGI("%s", metric);
+    size_t length = mClient_p->write(reinterpret_cast<const uint8_t *>(data.data()), data.size());
 
     mClient_p->flush();
     mClient_p->stop();
+
+    if (length != data.size())
+    {
+        LOGE("failed to send, written %u of %u bytes", length, data.size());
+    }
 
     return length;
 }

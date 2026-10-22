@@ -47,6 +47,14 @@ public:
     virtual void clear();
     virtual void destroy();
 
+    // Limit the time to resolve the host and connect, in milliseconds
+    void setTimeout(unsigned long timeout) { mClient_p->setTimeout(timeout); }
+
+    // Collect the metrics sent until commit() and send them in one connection
+    virtual void beginBatch() {}
+    // Send the collected metrics, returns the number of bytes written
+    virtual size_t commit() { return 0; }
+
     template <typename T, typename std::enable_if<std::is_arithmetic<T>::value, int>::type = 0>
     void addHeader(const std::string &tag, const T &value, bool condition = true)
     {
