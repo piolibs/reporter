@@ -23,25 +23,24 @@ size_t InfluxReporter::send(uint32_t timestamp)
     if (mMeasurement.empty() || (mHeaders.empty() && mTags.empty() && mFields.empty()))
         return 0;
 
-    if (!mClient_p->connect(mHost.c_str(), mPort))
-        return 0;
-
     char metric[160] = {0};
     char *npos = metric;
 
+    // Fails if the text doesn't fit, a truncated metric is never sent
     auto append = [&](auto &&...args) -> bool
     {
-        if (static_cast<size_t>(npos - metric) >= sizeof(metric))
+        size_t remaining = sizeof(metric) - (npos - metric);
+        int length = snprintf(npos, remaining, std::forward<decltype(args)>(args)...);
+        if ((length < 0) || (static_cast<size_t>(length) >= remaining))
         {
             LOGE("failed to send metric, out of metric");
             return false;
         }
-        npos += snprintf(npos, (sizeof(metric) - (npos - metric)),
-                             std::forward<decltype(args)>(args)...);
+        npos += length;
         return true;
     };
 
-    if (!append(mMeasurement.c_str()))
+    if (!append("%s", mMeasurement.c_str()))
         return 0;
 
     for (auto it = mHeaders.begin(); it != mHeaders.end(); ++it)
@@ -70,11 +69,15 @@ size_t InfluxReporter::send(uint32_t timestamp)
             return 0;
     }
 
+    // Connect only for a complete metric, so a failed one doesn't leave it open
+    if (!mClient_p->connect(mHost.c_str(), mPort))
+        return 0;
+
     const size_t length = mClient_p->write(
         reinterpret_cast<const uint8_t *>(metric),
         strlen(metric));
 
-    LOGI(metric);
+    LOGI("%s", metric);
 
     mClient_p->flush();
     mClient_p->stop();

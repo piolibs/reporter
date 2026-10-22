@@ -13,6 +13,7 @@ using namespace reporter;
 
 void Reporter::create(const std::string &measurement) {
     mMeasurement = measurement;
+    mHeaders.clear();
     mTags.clear();
     mFields.clear();
 }
